@@ -1,3 +1,5 @@
 # Ignore pdf and word files from local repo
 *.pdf
 *.docx
+*.ipynb
+*.h5
