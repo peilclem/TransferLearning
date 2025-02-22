@@ -1,3 +1,3 @@
-# Ignore pdf and word files
+# Ignore pdf and word files from local repo
 *.pdf
 *.docx
