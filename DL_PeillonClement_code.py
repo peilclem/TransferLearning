@@ -5,8 +5,8 @@ Created on Sat Feb 22 15:20:05 2025
 @author: peill
 """
 import os
-# import torch
-# import torchvision.datasets as dset
+import torch
+import torchvision.datasets as dset
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -32,6 +32,7 @@ def load_imgs(path):
         Array containing all the images
         Shape (nb_imgs, img_size, img_size)
     """
+    
     files = os.listdir(path)
     nb_imgs = len(files)
     imgs = np.zeros((nb_imgs, 1, img_size, img_size))
@@ -56,16 +57,15 @@ def buildTensor(path):
     X = np.concatenate((damage, no_damage), axis=0)
     y = np.concatenate((y0, y1), axis=0)
     
-    return X, y
+    
+    return torch.Tensor(X), torch.Tensor(y)
     
 # Convert to torch tensors
 X_train, y_train = buildTensor(data_dir / 'train_another')
 X_val, y_val = buildTensor(data_dir / 'validation_another')
 X_test, y_test = buildTensor(data_dir / 'test_another')
 
-
-
-
+# Create dataset & Dataloader
 
 
 
