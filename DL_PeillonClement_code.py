@@ -9,12 +9,14 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import torchvision.transforms as transforms
 
 from PIL import Image 
 from pathlib import Path
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 from torch.utils.data import DataLoader
+
 
 root_dir = Path(__file__).parent
 data_dir = root_dir / 'data'
@@ -84,7 +86,7 @@ class CustomImageDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-        image = read_image(img_path)
+        image = Image.open(img_path) # use pillow to avoid having a tensor 
         label = self.img_labels.iloc[idx, 1]
         if self.transform:
             image = self.transform(image)
@@ -109,13 +111,19 @@ class CustomImageDataset(Dataset):
 
         return pd.DataFrame(annotation_file)
 
-train_dataset = CustomImageDataset(data_dir / 'train_another')
+# To transform the images in grayscale
+transform = transforms.Compose([
+    transforms.Grayscale(num_output_channels=1),
+    transforms.ToTensor()
+])
+
+train_dataset = CustomImageDataset(data_dir / 'train_another', transform)
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-val_dataset = CustomImageDataset(data_dir / 'validation_another')
+val_dataset = CustomImageDataset(data_dir / 'validation_another', transform)
 val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-test_dataset = CustomImageDataset(data_dir / 'test_another')
+test_dataset = CustomImageDataset(data_dir / 'test_another', transform)
 test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 """ TRANSFORM INTO GRAYSCALE IMG"""
