@@ -8,6 +8,7 @@ import os
 import torch
 import numpy as np
 import pandas as pd
+import torch.nn as nn
 import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 
@@ -86,12 +87,12 @@ class CustomImageDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-        image = Image.open(img_path) # use pillow to avoid having a tensor 
+        image = Image.open(img_path)                                           # use pillow to avoid having a tensor 
         label = self.img_labels.iloc[idx, 1]
         if self.transform:
             image = self.transform(image)
         if self.target_transform:
-            label = self.target_transform(label)
+            label = self.target_transform(label)                                                 # scale values between 0 and 1            
         return image, label
     
     def build_annotationFile(self):
@@ -112,10 +113,7 @@ class CustomImageDataset(Dataset):
         return pd.DataFrame(annotation_file)
 
 # To transform the images in grayscale
-transform = transforms.Compose([
-    transforms.Grayscale(num_output_channels=1),
-    transforms.ToTensor()
-])
+transform = transforms.ToTensor()
 
 train_dataset = CustomImageDataset(data_dir / 'train_another', transform)
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -126,6 +124,72 @@ val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True)
 test_dataset = CustomImageDataset(data_dir / 'test_another', transform)
 test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-""" TRANSFORM INTO GRAYSCALE IMG"""
 train_features, train_labels = next(iter(train_dataloader))
-train_features[0].shape
+print(train_features[0])
+print(train_features[0].shape)                                                 # should be (3, 128, 128)
+
+#%% Build model --> https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+import torch.nn.functional as F
+
+class MyCNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 32, (3,3), padding=1)
+        self.pool1 = nn.MaxPool2d((2, 2))
+        self.conv2 = nn.Conv2d(32, 64, (3, 3), padding=1)
+        self.pool2 = nn.MaxPool2d((2, 2))
+        self.conv3 = nn.Conv2d(64, 128, (3,3), padding=1)
+        self.pool3 = nn.MaxPool2d((2, 2))
+        self.conv4 = nn.Conv2d(128, 128, (3, 3), padding=1)
+        self.pool4 = nn.MaxPool2d((2, 2))
+        self.fc1 = nn.Linear(128 * 8 * 8, 512)
+        self.fc2 = nn.Linear(512, 1)
+    
+    def forward(self, x):
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.pool1(x)
+        print(f'Layer1 \t\tout_shape: {x.shape}')
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = self.pool2(x)
+        print(f'Layer2 \t\tout_shape: {x.shape}')
+        x = self.conv3(x)
+        x = F.relu(x)
+        x = self.pool3(x)
+        print(f'Layer3 \t\tout_shape: {x.shape}')
+        x = self.conv4(x)
+        x = F.relu(x)
+        x = self.pool4(x)
+        print(f'Layer4 \t\tout_shape: {x.shape}')
+        x = torch.flatten(x, 0)
+        print(f'Flatten\t\tout_shape: {x.shape}')
+        
+        x = self.fc1(x)
+        x = F.relu(x)
+        print(f'Linear1 \tout_shape: {x.shape}')
+        x = self.fc2(x)
+        x = F.sigmoid(x)
+        print(f'Output \t\tout_shape: {x.shape}')
+        return x
+
+#%%
+model = MyCNN()   
+x = train_features[0]
+x.shape
+y = model.forward(x)
+print(y.item())
+
+
+# model = models.Sequential()
+# model.add(layers.Conv2D(32,(3,3), activation = 'relu', input_shape = (150,150,3)))
+# model.add(layers.MaxPooling2D((2,2)))
+# model.add(layers.Conv2D(64,(3,3), activation = 'relu'))
+# model.add(layers.MaxPooling2D((2,2)))
+# model.add(layers.Conv2D(128,(3,3), activation = 'relu'))
+# model.add(layers.MaxPooling2D((2,2)))
+# model.add(layers.Conv2D(128,(3,3), activation = 'relu'))
+# model.add(layers.MaxPooling2D((2,2)))
+# model.add(layers.Flatten())
+# model.add(layers.Dense(512,activation = 'relu'))
+# model.add(layers.Dense(1, activation = 'sigmoid'))
