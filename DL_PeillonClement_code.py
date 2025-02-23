@@ -28,7 +28,7 @@ data_dir = root_dir / 'data'
 # Hyperparameters
 IMG_SIZE = 128
 BATCH_SIZE = 64
-EPOCHS = 3
+EPOCHS = 2
 
 # Create dataset & Dataloader --> https://pytorch.org/tutorials/beginner/basics/data_tutorial.html
 class CustomImageDataset(Dataset):    
@@ -144,14 +144,15 @@ def calculate_accuracy(y_gt, y_pred):
     accuracy = correct / total
     return accuracy
 
-print('-'*30)
-print(f'{"Start Training":^30}')
-print('-'*30)
-    
+print('-'*50)
+print(f'{"Start Training":^50}')
+print('-'*50)
+
+loss_tab, accuracy_tab = [], []
+
 for epoch in range(EPOCHS): # 3'/epoch on CPU --> try to train on cluster
-    loss_tab, loss_batch = [], 0
-    accuracy_tab, accuracy_batch = [], 0
-    count = 0
+    loss_batch, accuracy_batch, count = 0, 0, 0
+
     for img, y_gt in tqdm(train_dataloader):
         count += 1
         y_gt = y_gt.reshape(-1,1).float()
@@ -170,14 +171,44 @@ for epoch in range(EPOCHS): # 3'/epoch on CPU --> try to train on cluster
     loss_tab.append(loss_batch)
     accuracy_tab.append(accuracy_batch/count)
     
-    print(f'[{epoch:03d}/{EPOCHS}]\tLoss: {loss_batch:.6f}\tAccuracy: {accuracy_batch/count*100:.2f}%\n')        
+    print(f'[{epoch+1:03d}/{EPOCHS}]\t\tLoss: {loss_batch:.6f}\tAccuracy: {accuracy_batch/count*100:.2f}%\n')        
         
-print('-'*30)
-print(f'{"End Training":^30}')
-print('-'*30)
+
+
+print('-'*50)
+print(f'{"End Training":^50}')
+print('-'*50)
             
-        
-        
+#%% PLOTS
+def monitor_training(loss_tab, accuracy_tab):
+    plt.figure()
+    plt.suptitle('Monitor Training')
+    
+    plt.subplot(1,2,1)
+    plt.title('Loss')
+    plt.plot(np.linspace(0, EPOCHS-1, num=EPOCHS), loss_tab, color='navy', lw=1, label='Training Loss')
+    # plt.plot(np.linspace(0, EPOCHS-1, num=EPOCHS), loss_val_tab, color='darkorange', lw=1, label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    plt.subplot(1,2,2)
+    plt.title('Accuracy')
+    plt.plot(np.linspace(0, EPOCHS-1, num=EPOCHS), accuracy_tab, color='navy', lw=1, label='Training Accuracy')
+    # plt.plot(np.linspace(0, EPOCHS-1, num=EPOCHS), accuracy_val_tab, color='darkorange', lw=1, label='Validation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    plt.show()
+    return None
+
+monitor_training(loss_tab, accuracy_tab)
+
+""" ADD VALIDATION """
+""" ADD plots to monitor training
+    Side by side loss & accuracy
+    """
         
         
         
