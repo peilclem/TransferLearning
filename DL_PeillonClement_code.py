@@ -9,9 +9,12 @@ import torch
 import numpy as np
 import pandas as pd
 import torch.nn as nn
+import torch.optim as optim
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 
+from tqdm import tqdm
 from PIL import Image 
 from pathlib import Path
 from torch.utils.data import Dataset
@@ -25,54 +28,7 @@ data_dir = root_dir / 'data'
 # Hyperparameters
 IMG_SIZE = 128
 BATCH_SIZE = 64
-
-# def load_imgs(path):
-#     """
-#     Load images from local folder
-
-#     Parameters
-#     ----------
-#     path : path
-#         Path to the folder containing the images.
-
-#     Returns
-#     -------
-#     ndarray
-#         Array containing all the images
-#         Shape (nb_imgs, IMG_SIZE, IMG_SIZE)
-#     """
-    
-#     files = os.listdir(path)
-#     nb_imgs = len(files)
-#     imgs = np.zeros((nb_imgs, 1, IMG_SIZE, IMG_SIZE))
-    
-#     for k, file in enumerate(files):
-#         img = Image.open(path / file).convert('L') # load image and convert to grayscale
-#         img = np.asarray(img)
-        
-#         # Add to the list of images
-#         imgs[k]=img
-#     return imgs
-    
-# def buildTensor(path):
-#     damage = load_imgs(path / 'damage')
-#     no_damage = load_imgs(path / 'no_damage')
-    
-#     m, n = damage.shape[0], no_damage.shape[0]
-    
-#     y0 = np.zeros((n,1))
-#     y1 = np.ones((m,1))
-    
-#     X = np.concatenate((damage, no_damage), axis=0)
-#     y = np.concatenate((y0, y1), axis=0)
-    
-#     return torch.Tensor(X), torch.Tensor(y)
-    
-# # Convert to torch tensors
-# X_train, y_train = buildTensor(data_dir / 'train_another')
-# X_val, y_val = buildTensor(data_dir / 'validation_another')
-# X_test, y_test = buildTensor(data_dir / 'test_another')
-
+EPOCHS = 3
 
 # Create dataset & Dataloader --> https://pytorch.org/tutorials/beginner/basics/data_tutorial.html
 class CustomImageDataset(Dataset):    
@@ -92,7 +48,7 @@ class CustomImageDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         if self.target_transform:
-            label = self.target_transform(label)                                                 # scale values between 0 and 1            
+            label = self.target_transform(label)                               # scale values between 0 and 1            
         return image, label
     
     def build_annotationFile(self):
@@ -125,11 +81,9 @@ test_dataset = CustomImageDataset(data_dir / 'test_another', transform)
 test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 train_features, train_labels = next(iter(train_dataloader))
-print(train_features[0])
-print(train_features[0].shape)                                                 # should be (3, 128, 128)
+print(f'\nSize of a single image: {train_features[0].shape}\n')                  # should be (3, 128, 128)
 
 #%% Build model --> https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
-import torch.nn.functional as F
 
 class MyCNN(nn.Module):
     def __init__(self):
@@ -142,6 +96,7 @@ class MyCNN(nn.Module):
         self.pool3 = nn.MaxPool2d((2, 2))
         self.conv4 = nn.Conv2d(128, 128, (3, 3), padding=1)
         self.pool4 = nn.MaxPool2d((2, 2))
+        self.flatten = nn.Flatten(1,-1)
         self.fc1 = nn.Linear(128 * 8 * 8, 512)
         self.fc2 = nn.Linear(512, 1)
     
@@ -149,33 +104,112 @@ class MyCNN(nn.Module):
         x = self.conv1(x)
         x = F.relu(x)
         x = self.pool1(x)
-        print(f'Layer1 \t\tout_shape: {x.shape}')
+        # print(f'Layer1 \t\tout_shape: {x.shape}')
         x = self.conv2(x)
         x = F.relu(x)
         x = self.pool2(x)
-        print(f'Layer2 \t\tout_shape: {x.shape}')
+        # print(f'Layer2 \t\tout_shape: {x.shape}')
         x = self.conv3(x)
         x = F.relu(x)
         x = self.pool3(x)
-        print(f'Layer3 \t\tout_shape: {x.shape}')
+        # print(f'Layer3 \t\tout_shape: {x.shape}')
         x = self.conv4(x)
         x = F.relu(x)
         x = self.pool4(x)
-        print(f'Layer4 \t\tout_shape: {x.shape}')
-        x = torch.flatten(x, 0)
-        print(f'Flatten\t\tout_shape: {x.shape}')
+        # print(f'Layer4 \t\tout_shape: {x.shape}')
+        x = self.flatten(x)
+        # print(f'Flatten\t\tout_shape: {x.shape}')
         
         x = self.fc1(x)
         x = F.relu(x)
-        print(f'Linear1 \tout_shape: {x.shape}')
+        # print(f'Linear1 \tout_shape: {x.shape}')
         x = self.fc2(x)
         x = F.sigmoid(x)
-        print(f'Output \t\tout_shape: {x.shape}')
+        # print(f'Output \t\tout_shape: {x.shape}')
         return x
 
-#%%
-model = MyCNN()   
-x = train_features[0]
-x.shape
-y = model.forward(x)
-print(y.item())
+
+model = MyCNN()
+print(model)
+
+criterion = nn.BCELoss()
+optimizer = optim.RMSprop(model.parameters(), lr=0.001,)
+
+
+#%% TRAINING LOOOP
+def calculate_accuracy(y_gt, y_pred):
+    predictions = torch.round(y_pred)
+    correct = (predictions == y_gt).float().sum()
+    total = y_gt.shape[0]
+    accuracy = correct / total
+    return accuracy
+
+print('-'*30)
+print(f'{"Start Training":^30}')
+print('-'*30)
+    
+for epoch in range(EPOCHS): # 3'/epoch on CPU --> try to train on cluster
+    loss_tab, loss_batch = [], 0
+    accuracy_tab, accuracy_batch = [], 0
+    count = 0
+    for img, y_gt in tqdm(train_dataloader):
+        count += 1
+        y_gt = y_gt.reshape(-1,1).float()
+        
+        optimizer.zero_grad()
+        
+        y_pred = model(img)
+        loss = criterion(y_pred, y_gt)     
+        loss.backward()
+        optimizer.step()
+        
+        loss_batch += loss.item()
+        accuracy_batch += calculate_accuracy(y_gt, y_pred)
+    
+    # Store loss value at epoch end
+    loss_tab.append(loss_batch)
+    accuracy_tab.append(accuracy_batch/count)
+    
+    print(f'[{epoch:03d}/{EPOCHS}]\tLoss: {loss_batch:.6f}\tAccuracy: {accuracy_batch/count*100:.2f}%\n')        
+        
+print('-'*30)
+print(f'{"End Training":^30}')
+print('-'*30)
+            
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
